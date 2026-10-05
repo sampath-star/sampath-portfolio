@@ -17,8 +17,52 @@ export default function Contact() {
     setTimeout(() => setCopiedEmail(false), 2000);
   };
 
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
+
+  const checkSpam = () => {
+    const historyStr = localStorage.getItem("msgHistory");
+    let history: number[] = historyStr ? JSON.parse(historyStr) : [];
+    
+    const now = Date.now();
+    // Filter messages in the last 60 seconds
+    history = history.filter(time => now - time < 60000);
+    
+    if (history.length >= 3) {
+      alert("Spam protection: Limit of 3 messages per minute reached. Please wait.");
+      return false;
+    }
+    
+    const lastSent = history.length > 0 ? history[history.length - 1] : 0;
+    if (now - lastSent < 30000) {
+       alert("Please wait before sending again.");
+       return false;
+    }
+
+    return true;
+  };
+
+  const recordSend = () => {
+    const historyStr = localStorage.getItem("msgHistory");
+    let history: number[] = historyStr ? JSON.parse(historyStr) : [];
+    const now = Date.now();
+    history = history.filter(time => now - time < 60000);
+    history.push(now);
+    localStorage.setItem("msgHistory", JSON.stringify(history));
+    setCooldown(30);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!checkSpam()) return;
+    
     setStatus("sending");
     
     try {
@@ -33,6 +77,7 @@ export default function Contact() {
       if (response.ok) {
         setStatus("success");
         setFormData({ name: "", email: "", subject: "", message: "" });
+        recordSend();
         setTimeout(() => setStatus("idle"), 3000);
       } else {
         setStatus("error");
@@ -158,13 +203,15 @@ export default function Contact() {
               
               <button 
                 type="submit" 
-                disabled={status === "sending"}
+                disabled={status === "sending" || cooldown > 0}
                 className="w-full bg-luxury-text text-white font-bold py-4 rounded-xl hover:bg-black transition-all flex items-center justify-center space-x-2 disabled:opacity-70 disabled:cursor-not-allowed shadow-xl hover:-translate-y-1"
               >
                 {status === "sending" ? (
                   <span className="font-mono text-sm flex items-center"><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-3"></span> PROCESSING...</span>
                 ) : status === "success" ? (
                   <span className="text-green-400 flex items-center font-bold tracking-widest"><Check size={20} className="mr-3" /> MESSAGE SENT</span>
+                ) : cooldown > 0 ? (
+                  <span className="tracking-widest uppercase">WAIT {cooldown}s</span>
                 ) : (
                   <>
                     <span className="tracking-widest uppercase">Send Message</span>
